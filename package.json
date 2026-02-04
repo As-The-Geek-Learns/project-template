@@ -1,0 +1,20 @@
+{
+  "name": "my-project",
+  "version": "0.1.0",
+  "description": "Project description here",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"No tests configured yet\" && exit 0",
+    "lint": "echo \"No linter configured yet\" && exit 0",
+    "verify": "node scripts/verify.js",
+    "verify:skip-ai": "node scripts/verify.js --skip-ai-review",
+    "ai-review": "node scripts/ai-review.js",
+    "ai-review:diff": "node scripts/ai-review.js --diff",
+    "ai-review:security": "node scripts/ai-review.js --security-focus",
+    "ship": "node scripts/ship.js",
+    "ship:pr": "node scripts/ship.js --create-pr"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT"
+}

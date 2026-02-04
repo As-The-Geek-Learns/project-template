@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Build outputs
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Verification state (don't commit until ready to ship)
+# Uncomment these if you want to commit verification state:
+# .workflow/state/verify-state.json
+# .workflow/state/ai-review.json
+
+# Session documents are fine to commit (useful for history)
+# .workflow/sessions/
