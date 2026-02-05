@@ -131,6 +131,21 @@ Respond in JSON format:
 }`;
 
 // Utility functions
+
+// Sanitize strings before logging to prevent log injection attacks
+// (strips control characters that could manipulate terminal output)
+function sanitizeForLog(value) {
+  if (typeof value !== 'string') return String(value);
+  return value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\r]/g, '');
+}
+
+// Validate that a file path is within the project directory
+function isPathWithinProject(filePath) {
+  const resolved = path.resolve(filePath);
+  const projectRoot = path.resolve('.');
+  return resolved.startsWith(projectRoot + path.sep) || resolved === projectRoot;
+}
+
 function getGitDiff() {
   try {
     // Get diff of staged and unstaged changes
@@ -185,43 +200,56 @@ function findSourceFiles(baseDir) {
 
 function readFilesContent(filePaths) {
   const contents = [];
-  
+
   for (const filePath of filePaths) {
+    // Validate file path stays within project directory before reading
+    if (!isPathWithinProject(filePath)) {
+      console.warn('Skipping file outside project directory: ' + sanitizeForLog(filePath));
+      continue;
+    }
+
     try {
       let content = fs.readFileSync(filePath, 'utf-8');
-      
+
       // Truncate very large files
       if (content.length > MAX_FILE_SIZE) {
         content = content.substring(0, MAX_FILE_SIZE) + '\n\n... [truncated] ...';
       }
-      
+
       contents.push({
         path: filePath,
         content: content
       });
     } catch (error) {
-      console.warn('Could not read ' + filePath + ': ' + error.message);
+      console.warn('Could not read ' + sanitizeForLog(filePath) + ': ' + sanitizeForLog(error.message));
     }
   }
-  
+
   return contents;
+}
+
+// Sanitize file content for safe inclusion in API requests
+// (validates text is printable UTF-8, strips null bytes)
+function sanitizeFileContent(content) {
+  if (typeof content !== 'string') return '';
+  return content.replace(/\0/g, '');
 }
 
 function buildCodeContext(files, diff) {
   let context = '';
-  
+
   if (diff && options.useDiff) {
-    context = '## Git Diff (Changes to Review)\n\n```diff\n' + diff + '\n```\n\n';
+    context = '## Git Diff (Changes to Review)\n\n```diff\n' + sanitizeFileContent(diff) + '\n```\n\n';
   }
-  
+
   if (files.length > 0) {
     context += '## Source Files\n\n';
     for (const file of files) {
       const ext = path.extname(file.path).slice(1) || 'text';
-      context += '### ' + file.path + '\n\n```' + ext + '\n' + file.content + '\n```\n\n';
+      context += '### ' + sanitizeForLog(file.path) + '\n\n```' + ext + '\n' + sanitizeFileContent(file.content) + '\n```\n\n';
     }
   }
-  
+
   return context;
 }
 
@@ -295,7 +323,7 @@ async function callGemini(prompt, codeContext) {
   });
 }
 
-function parseGeminiResponse(response) {
+function extractJsonFromResponse(response) {
   // Strategy 1: Try parsing the full response as JSON directly
   try {
     return JSON.parse(response.trim());
@@ -331,13 +359,49 @@ function parseGeminiResponse(response) {
     }
   }
 
-  // Fallback: return raw text
-  console.warn('Warning: Could not parse structured JSON from Gemini response');
-  return {
-    summary: response,
+  return null;
+}
+
+// Parse and validate Gemini response, returning only expected fields
+// (reconstructs a clean object to prevent untrusted data from flowing to file writes)
+function parseGeminiResponse(response) {
+  const parsed = extractJsonFromResponse(response);
+
+  if (!parsed) {
+    console.warn('Warning: Could not parse structured JSON from Gemini response');
+    return {
+      summary: sanitizeForLog(response.substring(0, 2000)),
+      issues: [],
+      raw: true
+    };
+  }
+
+  // Reconstruct with only expected fields and safe string values
+  const clean = {
+    summary: typeof parsed.summary === 'string' ? String(parsed.summary) : '',
     issues: [],
-    raw: true
+    raw: false
   };
+
+  if (parsed.overallRisk) clean.overallRisk = String(parsed.overallRisk);
+  if (parsed.overallQuality) clean.overallQuality = String(parsed.overallQuality);
+  if (Array.isArray(parsed.positives)) clean.positives = parsed.positives.map(String);
+  if (Array.isArray(parsed.strengths)) clean.strengths = parsed.strengths.map(String);
+
+  if (Array.isArray(parsed.issues)) {
+    clean.issues = parsed.issues.map(function(issue) {
+      return {
+        severity: typeof issue.severity === 'string' ? String(issue.severity) : undefined,
+        priority: typeof issue.priority === 'string' ? String(issue.priority) : undefined,
+        location: typeof issue.location === 'string' ? String(issue.location) : '',
+        description: typeof issue.description === 'string' ? String(issue.description) : '',
+        recommendation: typeof issue.recommendation === 'string' ? String(issue.recommendation) : undefined,
+        suggestion: typeof issue.suggestion === 'string' ? String(issue.suggestion) : undefined
+      };
+    });
+  }
+
+  return clean;
 }
 
 // Main review process
@@ -409,20 +473,20 @@ async function main() {
     
     if (results.securityReview.overallRisk) {
       results.summary.securityRisk = results.securityReview.overallRisk;
-      console.log('Security Risk: ' + results.securityReview.overallRisk);
+      console.log('Security Risk: ' + sanitizeForLog(results.securityReview.overallRisk));
     }
-    
+
     if (results.securityReview.issues && results.securityReview.issues.length > 0) {
       console.log('Security Issues Found: ' + results.securityReview.issues.length);
       for (const issue of results.securityReview.issues) {
-        console.log('  [' + issue.severity + '] ' + issue.location + ': ' + issue.description);
+        console.log('  [' + sanitizeForLog(issue.severity) + '] ' + sanitizeForLog(issue.location) + ': ' + sanitizeForLog(issue.description));
       }
     } else {
       console.log('No security issues found.');
     }
   } catch (error) {
-    console.error('Security review failed: ' + error.message);
-    results.securityReview = { error: error.message };
+    console.error('Security review failed: ' + sanitizeForLog(error.message));
+    results.securityReview = { error: String(error.message) };
   }
 
   // Quality Review (unless security-only mode)
@@ -437,20 +501,20 @@ async function main() {
       
       if (results.qualityReview.overallQuality) {
         results.summary.codeQuality = results.qualityReview.overallQuality;
-        console.log('Code Quality: ' + results.qualityReview.overallQuality);
+        console.log('Code Quality: ' + sanitizeForLog(results.qualityReview.overallQuality));
       }
-      
+
       if (results.qualityReview.issues && results.qualityReview.issues.length > 0) {
         console.log('Quality Issues Found: ' + results.qualityReview.issues.length);
         for (const issue of results.qualityReview.issues) {
-          console.log('  [' + issue.priority + '] ' + issue.location + ': ' + issue.description);
+          console.log('  [' + sanitizeForLog(issue.priority) + '] ' + sanitizeForLog(issue.location) + ': ' + sanitizeForLog(issue.description));
         }
       } else {
         console.log('No quality issues found.');
       }
     } catch (error) {
-      console.error('Quality review failed: ' + error.message);
-      results.qualityReview = { error: error.message };
+      console.error('Quality review failed: ' + sanitizeForLog(error.message));
+      results.qualityReview = { error: String(error.message) };
     }
   }
 
@@ -463,14 +527,21 @@ async function main() {
   
   results.summary.passesReview = securityPass && qualityPass;
 
+  // Validate output path stays within project directory
+  const resolvedOutput = path.resolve(options.outputPath);
+  if (!resolvedOutput.startsWith(path.resolve('.') + path.sep)) {
+    console.error('ERROR: Output path must be within project directory');
+    process.exit(1);
+  }
+
   // Ensure output directory exists
-  const outputDir = path.dirname(options.outputPath);
+  const outputDir = path.dirname(resolvedOutput);
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  // Write results
-  fs.writeFileSync(options.outputPath, JSON.stringify(results, null, 2));
+  // Write results (serialized from our own structured object, not raw API response)
+  fs.writeFileSync(resolvedOutput, JSON.stringify(results, null, 2));
 
   // Print summary
   console.log('\n' + '='.repeat(60));
