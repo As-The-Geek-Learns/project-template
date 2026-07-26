@@ -1,63 +1,29 @@
 # Project: [PROJECT NAME]
 
-## Overview
+[One or two sentences: what this project does and why it exists. Assume the reader
+can see the filesystem — don't restate the tech stack or directory layout here.]
 
-Brief description of what this project does and its purpose.
+## Workflow
 
-## Tech Stack
-
-- **Language:** JavaScript/TypeScript/Python (update as needed)
-- **Framework:** (if applicable)
-- **Dependencies:** (list key dependencies)
-
-## Project Structure
-
-```
-src/
-├── index.js          # Entry point
-└── ...               # Other source files
-```
-
-## Development Workflow
-
-This project uses the **Ironclad Workflow**:
-
-1. **PLAN** - Create a plan document before coding
-2. **EXECUTE** - Implement planned tasks
-3. **VERIFY** - Run tests + AI code review
-4. **SHIP** - Create PR with verification evidence
-
-### Key Commands
+Follows the global **Ironclad Workflow** (`PLAN → EXECUTE → VERIFY → SHIP` — see
+`~/.claude/CLAUDE.md`). Scaffold commands:
 
 ```bash
-npm run verify        # Full verification with AI review
-npm run ship:pr       # Validate and create PR
+npm run verify        # typecheck + tests + AI review (needs GEMINI_API_KEY; verify.js explains if unset)
+npm run ship:pr       # validate and create PR
 ```
 
-### Human Checkpoints
+## Gotchas
 
-- Plan approval required before coding
-- Verification approval required before shipping
-- Human approves final merge
+Spend this file's tokens here — non-obvious constraints, incident-derived rules,
+edge cases a fresh session would miss. Genre examples: "types live in
+`src/types.ts` and nowhere else", "the staging DB wipes nightly". Delete this
+explainer once real entries exist.
 
-## Security Considerations
+- [none yet]
 
-- All user inputs must be validated
-- No secrets in code (use environment variables)
-- Run `npm audit` before shipping
+## Pointers
 
-## Code Conventions
+Link deep material instead of inlining it — specs, ADRs, mockups, skills:
 
-- (Add your coding conventions here)
-- (Naming patterns, file organization, etc.)
-
-## Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GEMINI_API_KEY` | For AI review | Google Gemini API key |
-
-## Current Status
-
-- **Phase:** (PLAN / EXECUTE / VERIFY / SHIP)
-- **Active Session:** (link to session document if any)
+- [none yet — e.g. `docs/adr/`]
